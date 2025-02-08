@@ -68,6 +68,98 @@ texts = [
     "这个困扰了一个多世纪的悬案，终于有了突破。我们或许能见证'开膛手杰克'这个世纪谜案的最终告破。"
 ]
 
+async def generate_audio(text, output_path):
+    """生成语音文件"""
+    try:
+        print("开始生成语音...")
+        communicate = edge_tts.Communicate(text, "zh-CN-YunxiNeural")
+        await communicate.save(output_path)
+        print(f"语音文件已保存至：{output_path}")
+        return True
+    except Exception as e:
+        print(f"生成语音时出错：{str(e)}")
+        return False
+
+def process_face_image(input_path, output_path):
+    """处理人物图片，移除背景"""
+    try:
+        print(f"正在处理人物图片：{input_path}")
+        
+        # 读取图片
+        with open(input_path, 'rb') as i:
+            input_data = i.read()
+            
+        # 移除背景
+        output_data = remove(input_data)
+        
+        # 保存结果
+        with open(output_path, 'wb') as o:
+            o.write(output_data)
+            
+        return True
+    except Exception as e:
+        print(f"处理人物图片时出错：{str(e)}")
+        return False
+
+def create_text_frame(text, size=(1920, 1080), font_path='/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc', font_size=70):
+    """创建字幕帧"""
+    img = Image.new('RGBA', size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    font = ImageFont.truetype(font_path, font_size)
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    
+    x = (size[0] - text_width) // 2
+    y = size[1] - text_height - 100
+    
+    # 绘制文本（白色，带黑色描边）
+    outline_color = 'black'
+    outline_width = 3
+    for dx in range(-outline_width, outline_width + 1):
+        for dy in range(-outline_width, outline_width + 1):
+            draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
+    draw.text((x, y), text, font=font, fill='white')
+    
+    return np.array(img)
+
+def run_wav2lip(face_path, audio_path, output_path):
+    """运行 Wav2Lip 进行口型同步"""
+    try:
+        print("开始进行口型同步...")
+        
+        # 下载 Wav2Lip 模型（如果尚未下载）
+        model_path = '/content/drive/MyDrive/digital_human_project/checkpoints/wav2lip.pth'
+        if not os.path.exists(model_path):
+            print("正在下载 Wav2Lip 模型...")
+            !wget -O {model_path} https://github.com/Rudrabha/Wav2Lip/releases/download/v1.0/wav2lip.pth
+        
+        # 克隆 Wav2Lip 仓库（如果尚未克隆）
+        if not os.path.exists('/content/Wav2Lip'):
+            !git clone https://github.com/Rudrabha/Wav2Lip.git /content/Wav2Lip
+        
+        # 运行 Wav2Lip
+        cmd = f"""cd /content/Wav2Lip && python inference.py \
+            --checkpoint_path {model_path} \
+            --face {face_path} \
+            --audio {audio_path} \
+            --outfile {output_path} \
+            --nosmooth"""
+        
+        os.system(cmd)
+        
+        if os.path.exists(output_path):
+            print("口型同步完成！")
+            return True
+        else:
+            print("口型同步失败：未生成输出文件")
+            return False
+            
+    except Exception as e:
+        print(f"口型同步时出错：{str(e)}")
+        return False
+
 async def create_digital_human_video_simple(face_path, texts, output_path):
     """创建简单的数字人视频，视频大小根据输入人物图片大小自适应"""
     clips_to_close = []
